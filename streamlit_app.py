@@ -30,45 +30,59 @@ def get_website_content(url):
 # -------- Scrape NBER Papers --------
 def scrape_nber_papers():
 
-    url = "https://www.nber.org/api/v1/papers"
+    url = "https://www.nber.org/papers"
+
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
 
     params = {
         "page": 1,
-        "per_page": 50,
-        "sort": "public_date"
+        "perPage": 50,
+        "sortBy": "public_date"
     }
 
-    response = requests.get(url, params=params)
+    response = requests.get(url, headers=headers, params=params)
 
     if response.status_code != 200:
-        st.error("Failed to retrieve data from NBER API.")
+        st.error("Failed to retrieve data from NBER website.")
         return
 
-    papers = response.json().get("data", [])
+    soup = BeautifulSoup(response.text, "html.parser")
 
-    if not papers:
-        st.error("No data extracted from the API.")
+    job_elems = soup.find_all("div", class_="digest-card")
+
+    if not job_elems:
+        st.error("No data extracted from the webpage.")
         return
 
     data = []
 
-    for paper in papers:
+    for job_elem in job_elems:
 
-        title = paper.get("title", "")
-        year = paper.get("public_date", "")[:4]
-        wpno = paper.get("number", "")
-        authors = ", ".join([a["name"] for a in paper.get("authors", [])])
+        title_elem = job_elem.find("div", class_="digest-card__title")
+        year_elem = job_elem.find("span", class_="digest-card__label")
+        wpno_elem = job_elem.find("a", class_="paper-card__paper_number")
+        author_elem = job_elem.find("div", class_="digest-card__items")
+
+        if None in (title_elem, year_elem, wpno_elem, author_elem):
+            continue
+
+        title_text = title_elem.text.strip()
+        year = year_elem.text.strip()
+        wpno = wpno_elem.text.strip()
+        author = author_elem.text.strip().replace("Author(s) - ", "")
 
         data.append({
             "Source": "National Bureau of Economic Research",
-            "Title": title,
+            "Title": title_text,
             "Year": year,
             "WP_NO": wpno,
             "Place": "Cambridge",
             "Publisher": "NBER",
             "Series": "NBER Working Papers ;",
             "wpno": f"NBERWP {wpno}",
-            "Author": authors
+            "Author": author
         })
 
     df = pd.DataFrame(data)
