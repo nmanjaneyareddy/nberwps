@@ -15,24 +15,6 @@ from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 import time
 
-def get_website_content(url):
-    try:
-        headers = {
-            "User-Agent": "Mozilla/5.0"
-        }
-        response = requests.get(url, headers=headers)
-
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, "html.parser")
-            return soup
-        else:
-            st.error(f"Failed to retrieve page. Status code: {response.status_code}")
-            return None
-
-    except Exception as e:
-        st.error(f"Error fetching website content: {e}")
-        return None
-
 # Streamlit page configuration
 st.set_page_config(layout="wide")
 
