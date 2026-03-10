@@ -29,53 +29,47 @@ def get_website_content(url):
 
 # -------- Scrape NBER Papers --------
 def scrape_nber_papers():
-    url = "https://www.nber.org/papers?page=1&perPage=50&sortBy=public_date"
-    soup = get_website_content(url)
 
-    if soup is None:
-        st.error("Failed to retrieve data from the website.")
+    url = "https://www.nber.org/api/v1/papers"
+
+    params = {
+        "page": 1,
+        "per_page": 50,
+        "sort": "public_date"
+    }
+
+    response = requests.get(url, params=params)
+
+    if response.status_code != 200:
+        st.error("Failed to retrieve data from NBER API.")
         return
 
-    results = soup.find(class_="promo-grid__promos")
+    papers = response.json().get("data", [])
 
-    if not results:
-        st.error("No results found on the page.")
+    if not papers:
+        st.error("No data extracted from the API.")
         return
-
-    job_elems = results.find_all("div", class_="digest-card")
 
     data = []
 
-    for job_elem in job_elems:
+    for paper in papers:
 
-        title_elem = job_elem.find("div", class_="digest-card__title")
-        year_elem = job_elem.find("span", class_="digest-card__label")
-        wpno_elem = job_elem.find("a", class_="paper-card__paper_number")
-        author_elem = job_elem.find("div", class_="digest-card__items")
-
-        if None in (title_elem, year_elem, wpno_elem, author_elem):
-            continue
-
-        title_text = title_elem.text.strip()
-        year = year_elem.text.strip()
-        wpno = wpno_elem.text.strip()
-        author = author_elem.text.strip().replace("Author(s) - ", "")
+        title = paper.get("title", "")
+        year = paper.get("public_date", "")[:4]
+        wpno = paper.get("number", "")
+        authors = ", ".join([a["name"] for a in paper.get("authors", [])])
 
         data.append({
             "Source": "National Bureau of Economic Research",
-            "Title": title_text,
+            "Title": title,
             "Year": year,
             "WP_NO": wpno,
             "Place": "Cambridge",
             "Publisher": "NBER",
             "Series": "NBER Working Papers ;",
             "wpno": f"NBERWP {wpno}",
-            "Author": author
+            "Author": authors
         })
-
-    if not data:
-        st.error("No data extracted from the webpage.")
-        return
 
     df = pd.DataFrame(data)
 
@@ -92,7 +86,6 @@ def scrape_nber_papers():
         file_name="nber_papers.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
 
 # -------- Sidebar --------
 def main_sidebar():
