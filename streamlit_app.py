@@ -6,100 +6,100 @@ from PyPDF2 import PdfReader
 import pandas as pd
 from bs4 import BeautifulSoup
 
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
+from webdriver_manager.chrome import ChromeDriverManager
+import time
+
 # Streamlit page configuration
 st.set_page_config(layout="wide")
 
-# -------- Function to scrape website content --------
+# Function to scrape website content
 def get_website_content(url):
+    driver = None
     try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(url, headers=headers)
-
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, "html.parser")
-            return soup
-        else:
-            st.error(f"Failed to retrieve page. Status code: {response.status_code}")
-            return None
-
+        options = webdriver.ChromeOptions()
+        options.add_argument('--headless')
+        options.add_argument('--disable-gpu')
+        options.add_argument('--window-size=1920,1200')
+        driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
+        driver.get(url)
+        time.sleep(5)
+        html_doc = driver.page_source
+        soup = BeautifulSoup(html_doc, "html.parser")
+        return soup
     except Exception as e:
         st.error(f"Error fetching website content: {e}")
-        return None
+    finally:
+        if driver is not None:
+            driver.quit()
+    return None
 
-
-# -------- Scrape NBER Papers --------
 def scrape_nber_papers():
+    url = 'https://www.nber.org/papers?page=1&perPage=50&sortBy=public_date#listing-77041'
+    soup = get_website_content(url)
 
-    url = "https://www.nber.org/papers"
-
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
-
-    params = {
-        "page": 1,
-        "perPage": 50,
-        "sortBy": "public_date"
-    }
-
-    response = requests.get(url, headers=headers, params=params)
-
-    if response.status_code != 200:
-        st.error("Failed to retrieve data from NBER website.")
+    if soup is None:
+        st.error("Failed to retrieve data from the website.")
         return
 
-    soup = BeautifulSoup(response.text, "html.parser")
-
-    job_elems = soup.find_all("div", class_="digest-card")
-
-    if not job_elems:
-        st.error("No data extracted from the webpage.")
+    results = soup.find(class_='promo-grid__promos')
+    if not results:
+        st.error("No results found on the page.")
         return
+
+    job_elems = results.find_all('div', class_='digest-card')
 
     data = []
-
     for job_elem in job_elems:
-
-        title_elem = job_elem.find("div", class_="digest-card__title")
-        year_elem = job_elem.find("span", class_="digest-card__label")
-        wpno_elem = job_elem.find("a", class_="paper-card__paper_number")
-        author_elem = job_elem.find("div", class_="digest-card__items")
+        title_elem = job_elem.find('div', class_='digest-card__title')
+        year_elem = job_elem.find('span', class_="digest-card__label")
+        wpno_elem = job_elem.find('a', class_="paper-card__paper_number")
+        author_elem = job_elem.find('div', class_='digest-card__items')
 
         if None in (title_elem, year_elem, wpno_elem, author_elem):
             continue
 
         title_text = title_elem.text.strip()
-        year = year_elem.text.strip()
+        year = year_elem.text.strip().replace('May', '')
         wpno = wpno_elem.text.strip()
-        author = author_elem.text.strip().replace("Author(s) - ", "")
+        author = author_elem.text.strip().replace('Author(s) - ', '')
 
         data.append({
-            "Source": "National Bureau of Economic Research",
-            "Title": title_text,
-            "Year": year,
-            "WP_NO": wpno,
-            "Place": "Cambridge",
-            "Publisher": "NBER",
-            "Series": "NBER Working Papers ;",
-            "wpno": f"NBERWP {wpno}",
-            "Author": author
+            'Source': 'National Bureau of Economic Research',
+            'Title': title_text,
+            'Year': year,
+            'WP_NO': wpno,
+            'Place': 'Cambridge',
+            'Publisher': 'NBER',
+            'Series': 'NBER Working Papers ;',
+            'wpno': f'NBERWP {wpno}',
+            'Author': author
         })
+
+    if not data:
+        st.error("No data extracted from the webpage.")
+        return
 
     df = pd.DataFrame(data)
 
-    df[["Title1", "Subtitle"]] = df["Title"].str.split(":", n=1, expand=True).fillna("")
-    df.drop("Title", axis=1, inplace=True)
+    # Split 'Title' into 'Title1' and 'Subtitle'
+    df[['Title1', 'Subtitle']] = df['Title'].str.split(':', n=1, expand=True).fillna('')
 
-    excel_buffer = BytesIO()
-    df.to_excel(excel_buffer, index=False)
-    excel_buffer.seek(0)
+    # Drop the original 'Title' column
+    df.drop('Title', axis=1, inplace=True)
 
-    st.download_button(
-        label="Download NBER Papers Data",
-        data=excel_buffer,
-        file_name="nber_papers.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    # Save DataFrame to Excel
+    excel_file = "nber_papers.xlsx"
+    df.to_excel(excel_file, index=False)
+
+    # Provide download link for the Excel file
+    with open(excel_file, "rb") as file:
+        st.download_button(label="Download NBER Papers Data", data=file, file_name="nber_papers.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
 
 # -------- Sidebar --------
 def main_sidebar():
