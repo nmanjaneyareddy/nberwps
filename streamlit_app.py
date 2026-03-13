@@ -51,9 +51,9 @@ def scrape_nber():
             wp = paper.find_element(By.CSS_SELECTOR,".paper-card__paper_number").text
         except:
             wp = ""
-
         try:
-            authors = paper.find_element(By.CSS_SELECTOR,".digest-card__items").text.replace("Author(s) -","")
+            author_elements = paper.find_elements(By.CSS_SELECTOR, ".digest-card__items a")
+            authors = ", ".join([a.text for a in author_elements])
         except:
             authors = ""
 
