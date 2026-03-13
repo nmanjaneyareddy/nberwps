@@ -6,88 +6,103 @@ from PyPDF2 import PdfReader
 import pandas as pd
 from bs4 import BeautifulSoup
 
-def scrape_nber_papers():
+import streamlit as st
+import pandas as pd
+import time
+from io import BytesIO
 
-    url = "https://www.nber.org/papers"
-    headers = {"User-Agent": "Mozilla/5.0"}
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
 
-    response = requests.get(url, headers=headers)
 
-    if response.status_code != 200:
-        st.error("Failed to retrieve data from NBER")
-        return
+st.title("NBER Working Papers Scraper")
 
-    soup = BeautifulSoup(response.text, "html.parser")
+url = "https://www.nber.org/papers?page=1&perPage=50&sortBy=public_date#listing-77041"
 
-    papers = soup.select("div.digest-card")
+def scrape_nber():
 
-    if not papers:
-        st.error("No papers found on the page")
-        return
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+
+    driver = webdriver.Chrome(options=chrome_options)
+
+    driver.get(url)
+
+    time.sleep(5)
+
+    papers = driver.find_elements(By.CSS_SELECTOR,"div.digest-card")
 
     data = []
 
     for paper in papers:
 
-        title = paper.select_one(".digest-card__title")
-        year = paper.select_one(".digest-card__label")
-        author = paper.select_one(".digest-card__items")
-        wpno = paper.select_one(".paper-card__paper_number")
+        try:
+            title_el = paper.find_element(By.CSS_SELECTOR,".digest-card__title a")
+            title = title_el.text
+            link = title_el.get_attribute("href")
+        except:
+            title = ""
+            link = ""
 
-        title_text = title.text.strip() if title else ""
-        year_text = year.text.strip() if year else ""
-        wp_text = wpno.text.strip() if wpno else ""
+        try:
+            wp = paper.find_element(By.CSS_SELECTOR,".paper-card__paper_number").text
+        except:
+            wp = ""
 
-        author_text = ""
-        if author:
-            author_text = author.text.replace("Author(s) -", "").strip()
+        try:
+            authors = paper.find_element(By.CSS_SELECTOR,".digest-card__items").text.replace("Author(s) -","")
+        except:
+            authors = ""
+
+        try:
+            date = paper.find_element(By.CSS_SELECTOR,".digest-card__label").text
+        except:
+            date = ""
+
+        try:
+            abstract = paper.find_element(By.CSS_SELECTOR,".digest-card__summary").text
+        except:
+            abstract = ""
 
         data.append({
-            "Source": "National Bureau of Economic Research",
-            "Title": title_text,
-            "Year": year_text,
-            "WP_NO": wp_text,
-            "Place": "Cambridge",
-            "Publisher": "NBER",
-            "Series": "NBER Working Papers",
-            "WP_Number": f"NBERWP {wp_text}",
-            "Author": author_text
+            "Title":title,
+            "WorkingPaper":wp,
+            "Author":authors,
+            "Date":date,
+            "Abstract":abstract,
+            "PaperURL":link,
+            "Publisher":"NBER",
+            "Place":"Cambridge"
         })
 
-    df = pd.DataFrame(data)
+    driver.quit()
 
-    # Split title into title and subtitle
-    df[["Title1", "Subtitle"]] = df["Title"].str.split(":", n=1, expand=True)
-    df = df.fillna("")
+    return pd.DataFrame(data)
 
-    df.drop("Title", axis=1, inplace=True)
 
-    st.success(f"{len(df)} papers scraped successfully")
+if st.button("Scrape NBER Papers"):
 
-    excel_buffer = BytesIO()
-    df.to_excel(excel_buffer, index=False)
-    excel_buffer.seek(0)
+    with st.spinner("Scraping papers..."):
+
+        df = scrape_nber()
+
+    st.success(f"{len(df)} papers scraped")
+
+    st.dataframe(df)
+
+    excel = BytesIO()
+    df.to_excel(excel,index=False)
+    excel.seek(0)
 
     st.download_button(
-        label="Download Excel File",
-        data=excel_buffer,
-        file_name="nber_papers.xlsx",
-        mime="application/vnd.ms-excel"
+        "Download Excel",
+        data=excel,
+        file_name="nber_working_papers.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
-
-def main_sidebar():
-
-    st.title("NBER Working Papers Scraper")
-
-    if st.button("Start Scraping"):
-        with st.spinner("Scraping data..."):
-            scrape_nber_papers()
-
-
-if __name__ == "__main__":
-    main_sidebar()
-
 # -------- Download PDFs --------
 def download_pdfs_and_generate_report(start, end):
 
