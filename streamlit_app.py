@@ -9,13 +9,12 @@ from bs4 import BeautifulSoup
 def scrape_nber_papers():
 
     url = "https://www.nber.org/papers"
-
     headers = {"User-Agent": "Mozilla/5.0"}
 
     response = requests.get(url, headers=headers)
 
     if response.status_code != 200:
-        st.error("Failed to retrieve data from NBER.")
+        st.error("Failed to retrieve data from NBER")
         return
 
     soup = BeautifulSoup(response.text, "html.parser")
@@ -23,7 +22,7 @@ def scrape_nber_papers():
     papers = soup.select("div.digest-card")
 
     if not papers:
-        st.error("No papers found on the page.")
+        st.error("No papers found on the page")
         return
 
     data = []
@@ -32,47 +31,62 @@ def scrape_nber_papers():
 
         title = paper.select_one(".digest-card__title")
         year = paper.select_one(".digest-card__label")
-        wpno = paper.select_one(".paper-card__paper_number")
         author = paper.select_one(".digest-card__items")
+        wpno = paper.select_one(".paper-card__paper_number")
+
+        title_text = title.text.strip() if title else ""
+        year_text = year.text.strip() if year else ""
+        wp_text = wpno.text.strip() if wpno else ""
+
+        author_text = ""
+        if author:
+            author_text = author.text.replace("Author(s) -", "").strip()
 
         data.append({
             "Source": "National Bureau of Economic Research",
-            "Title": title.text.strip() if title else "",
-            "Year": year.text.strip() if year else "",
-            "WP_NO": wpno.text.strip() if wpno else "",
+            "Title": title_text,
+            "Year": year_text,
+            "WP_NO": wp_text,
             "Place": "Cambridge",
             "Publisher": "NBER",
-            "Series": "NBER Working Papers ;",
-            "wpno": f"NBERWP {wpno.text.strip()}" if wpno else "",
-            "Author": author.text.replace("Author(s) - ", "").strip() if author else ""
+            "Series": "NBER Working Papers",
+            "WP_Number": f"NBERWP {wp_text}",
+            "Author": author_text
         })
 
     df = pd.DataFrame(data)
 
-    df[["Title1","Subtitle"]] = df["Title"].str.split(":", n=1, expand=True).fillna("")
+    # Split title into title and subtitle
+    df[["Title1", "Subtitle"]] = df["Title"].str.split(":", n=1, expand=True)
+    df = df.fillna("")
+
     df.drop("Title", axis=1, inplace=True)
+
+    st.success(f"{len(df)} papers scraped successfully")
 
     excel_buffer = BytesIO()
     df.to_excel(excel_buffer, index=False)
     excel_buffer.seek(0)
 
     st.download_button(
-        "Download NBER Papers Data",
+        label="Download Excel File",
         data=excel_buffer,
-        file_name="nber_papers.xlsx"
+        file_name="nber_papers.xlsx",
+        mime="application/vnd.ms-excel"
     )
-# -------- Sidebar --------
+
+
 def main_sidebar():
-    st.header("NBER Papers Scraper")
+
+    st.title("NBER Working Papers Scraper")
 
     if st.button("Start Scraping"):
-        with st.spinner("Scraping data, please wait..."):
+        with st.spinner("Scraping data..."):
             scrape_nber_papers()
 
 
 if __name__ == "__main__":
     main_sidebar()
-
 
 # -------- Download PDFs --------
 def download_pdfs_and_generate_report(start, end):
