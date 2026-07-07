@@ -282,8 +282,6 @@ st.title("NBER Working Papers Scraper and Downloader")
 st.markdown(
     """
     This app scrapes NBER working paper metadata and downloads NBER working paper PDFs.
-
-    It does **not** use Selenium, so it is more reliable on Streamlit Cloud.
     """
 )
 
