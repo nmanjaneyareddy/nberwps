@@ -36,6 +36,44 @@ def clean_text(value):
     return " ".join(value.get_text(" ", strip=True).split())
 
 
+def get_authors(soup):
+    """
+    Extract only the authors attached to the current paper.
+    Broad /people/ searches also capture navigation and recommended-paper authors.
+    """
+    author_selectors = [
+        ".page-header__authors a[href*='/people/']",
+        ".field--name-field-authors a[href*='/people/']",
+        ".field--name-field-author a[href*='/people/']",
+        "[class*='author'] a[href*='/people/']"
+    ]
+
+    author_links = []
+
+    for selector in author_selectors:
+        author_links = soup.select(selector)
+
+        if author_links:
+            break
+
+    if not author_links:
+        title_el = soup.select_one("h1")
+        header_container = title_el.find_parent("header") if title_el else None
+
+        if header_container:
+            author_links = header_container.select("a[href*='/people/']")
+
+    authors = []
+
+    for author_link in author_links:
+        author_name = clean_text(author_link)
+
+        if author_name and author_name not in authors:
+            authors.append(author_name)
+
+    return ", ".join(authors)
+
+
 def dataframe_to_excel(df, sheet_name):
     excel_buffer = BytesIO()
 
@@ -129,22 +167,8 @@ def scrape_single_nber_paper(paper_number):
                 result["Abstract"] = abstract_text
                 break
 
-        # Authors
-        author_links = soup.select("a[href*='/people/']")
-        authors = []
-
-        author_heading = soup.find(string=re.compile("Authors", re.I))
-        
-        if author_heading:
-            container = author_heading.find_parent()
-        
-            if container:
-                for a in container.find_all("a", href=re.compile("/people/")):
-                    name = clean_text(a)
-                    if name and name not in authors:
-                        authors.append(name)
-        
-        result["Author"] = "; ".join(authors)
+        # Authors - restrict extraction to this paper's author/header section.
+        result["Author"] = get_authors(soup)
 
         # Date
         page_text = soup.get_text(" ", strip=True)
