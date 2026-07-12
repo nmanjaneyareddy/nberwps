@@ -132,14 +132,16 @@ def scrape_single_nber_paper(paper_number):
         # Authors
         author_links = soup.select("a[href*='/people/']")
         authors = []
-
-        for author_link in author_links:
-            author_name = clean_text(author_link)
-
-            if author_name and author_name not in authors:
-                authors.append(author_name)
-
-        result["Author"] = ", ".join(authors)
+        
+        author_section = soup.select_one(".authors")   # if available
+        
+        if author_section:
+            for a in author_section.select("a[href*='/people/']"):
+                name = clean_text(a)
+                if name and name not in authors:
+                    authors.append(name)
+        
+        result["Author"] = "; ".join(authors)
 
         # Date
         page_text = soup.get_text(" ", strip=True)
